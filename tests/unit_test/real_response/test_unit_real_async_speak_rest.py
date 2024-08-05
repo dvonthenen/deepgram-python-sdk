@@ -11,7 +11,7 @@ from http import HTTPStatus
 
 import httpx
 
-from deepgram import DeepgramClient, SpeakOptions, PrerecordedOptions, FileSource
+from deepgram import DeepgramClient, SpeakOptions
 
 from tests.utils import read_metadata_string, save_metadata_string
 
@@ -19,6 +19,7 @@ MODEL = "aura-asteria-en"
 
 # response constants
 TEXT1 = "Hello, world."
+RESPONSE_FILE = "test.mp3"
 
 # Create a list of tuples to store the key-value pairs
 input_output = [
@@ -30,12 +31,14 @@ input_output = [
             "model_name": ["aura-asteria-en"],
             "characters": ["13"],
         },
+        RESPONSE_FILE,
     ),
 ]
 
 
-@pytest.mark.parametrize("text, options, expected_output", input_output)
-def test_unit_speak_rest(text, options, expected_output):
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text, options, expected_output, file", input_output)
+async def test_unit_real_async_speak_rest(text, options, expected_output, file):
     # Save the options
     input_sha256sum = hashlib.sha256(text.encode()).hexdigest()
     option_sha256sum = hashlib.sha256(options.to_json().encode()).hexdigest()
@@ -66,16 +69,25 @@ def test_unit_speak_rest(text, options, expected_output):
     input_text = {"text": text}
 
     # Send the URL to Deepgram
+    file_buffer = open(f"tests/unit_test/{file}", "rb")
+    src_file_hash = hashlib.sha256(file_buffer.read()).hexdigest()
+    file_buffer.seek(0)
+
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(HTTPStatus.OK, headers=headers)
+        lambda request: httpx.Response(
+            HTTPStatus.OK, content=file_buffer.read(), headers=headers
+        )
     )
-    response = deepgram.speak.rest.v("1").stream_memory(
+    response = await deepgram.speak.asyncrest.v("1").stream_memory(
         input_text, options, transport=transport
     )
     # convert to string
     response["characters"] = str(response["characters"])
 
     # Check the response
+    dst_file_hash = hashlib.sha256(response.stream_memory.getbuffer()).hexdigest()
+    assert src_file_hash == dst_file_hash
+
     for key, value in expected_output.items():
         actual = response.eval(key)
         expected = value

@@ -11,49 +11,42 @@ from http import HTTPStatus
 
 import httpx
 
-from deepgram import DeepgramClient, PrerecordedOptions, PrerecordedResponse
+from deepgram import DeepgramClient, AnalyzeOptions, FileSource
 from tests.utils import read_metadata_string, save_metadata_string
 
 MODEL = "2-general-nova"
 
 # response constants
-URL1 = {
-    "url": "https://static.deepgram.com/examples/Bueller-Life-moves-pretty-fast.wav"
-}
-URL1_SMART_FORMAT1 = "Yep. I said it before and I'll say it again. Life moves pretty fast. You don't stop and look around once in a while, you could miss it."
-URL1_SUMMARIZE1 = "Yep. I said it before and I'll say it again. Life moves pretty fast. You don't stop and look around once in a while, you could miss it."
+FILE1 = "conversation.txt"
+FILE1_SUMMARIZE1 = "*"
 
 # Create a list of tuples to store the key-value pairs
 input_output = [
     (
-        URL1,
-        PrerecordedOptions(model="nova-2", smart_format=True),
-        {"results.channels.0.alternatives.0.transcript": [URL1_SMART_FORMAT1]},
-    ),
-    (
-        URL1,
-        PrerecordedOptions(model="nova-2", smart_format=True, summarize="v2"),
+        FILE1,
+        AnalyzeOptions(language="en", summarize=True),
         {
-            "results.channels.0.alternatives.0.transcript": [URL1_SMART_FORMAT1],
-            "results.summary.short": [URL1_SUMMARIZE1],
+            "results.summary.text": [
+                FILE1_SUMMARIZE1,
+            ]
         },
     ),
 ]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("url, options, expected_output", input_output)
-async def test_unit_async_listen_rest_url(url, options, expected_output):
+@pytest.mark.parametrize("filename, options, expected_output", input_output)
+async def test_unit_real_async_read_rest_file(filename, options, expected_output):
     # options
-    urlstr = json.dumps(url)
-    input_sha256sum = hashlib.sha256(urlstr.encode()).hexdigest()
+    filenamestr = json.dumps(filename)
+    input_sha256sum = hashlib.sha256(filenamestr.encode()).hexdigest()
     option_sha256sum = hashlib.sha256(options.to_json().encode()).hexdigest()
 
     unique = f"{option_sha256sum}-{input_sha256sum}"
 
     # filenames
-    file_resp = f"tests/response_data/listen/rest/{unique}-response.json"
-    file_error = f"tests/response_data/listen/rest/{unique}-error.json"
+    file_resp = f"tests/response_data/read/rest/{unique}-response.json"
+    file_error = f"tests/response_data/read/rest/{unique}-error.json"
 
     # clean up
     with contextlib.suppress(FileNotFoundError):
@@ -65,27 +58,30 @@ async def test_unit_async_listen_rest_url(url, options, expected_output):
     # Create a Deepgram client
     deepgram = DeepgramClient()
 
+    # file buffer
+    with open(f"tests/unit_test/{filename}", "rb") as file:
+        buffer_data = file.read()
+
+    payload: FileSource = {
+        "buffer": buffer_data,
+    }
+
     # make request
     transport = httpx.MockTransport(
         lambda request: httpx.Response(HTTPStatus.OK, content=response_data)
     )
-    response = await deepgram.listen.asyncrest.v("1").transcribe_url(
-        url, options, transport=transport
+    response = await deepgram.read.asyncanalyze.v("1").analyze_text(
+        payload, options, transport=transport
     )
 
     # Check the response
-    for key, value in response.metadata.model_info.items():
-        assert (
-            value.name == MODEL
-        ), f"Test ID: {unique} - Expected: {MODEL}, Actual: {value.name}"
-
     for key, value in expected_output.items():
         actual = response.eval(key)
         expected = value
 
         try:
             assert (
-                actual in expected
+                actual in expected or expected != "*"
             ), f"Test ID: {unique} - Key: {key}, Expected: {expected}, Actual: {actual}"
         finally:
             # if asserted

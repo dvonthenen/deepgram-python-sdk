@@ -46,7 +46,7 @@ response = ""
 
 
 @pytest.mark.parametrize("options, input, output", input_output)
-def test_unit_listen_websocket(options, input, output):
+def test_unit_real_listen_websocket(options, input, output):
     # Save the options
     input_sha256sum = hashlib.sha256(input.encode()).hexdigest()
     option_sha256sum = hashlib.sha256(options.to_json().encode()).hexdigest()

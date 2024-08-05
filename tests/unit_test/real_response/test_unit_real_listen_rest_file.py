@@ -11,31 +11,38 @@ from http import HTTPStatus
 
 import httpx
 
-from deepgram import DeepgramClient, AnalyzeOptions, FileSource
+from deepgram import DeepgramClient, PrerecordedOptions, FileSource
 from tests.utils import read_metadata_string, save_metadata_string
 
 MODEL = "2-general-nova"
 
 # response constants
-FILE1 = "conversation.txt"
+FILE1 = "preamble-rest.wav"
+FILE1_SMART_FORMAT = "We, the people of the United States, in order to form a more perfect union, establish justice, ensure domestic tranquility, provide for the common defense, promote the general welfare, and secure the blessings of liberty to ourselves and our posterity to ordain and establish this constitution for the United States of America."
 FILE1_SUMMARIZE1 = "*"
 
 # Create a list of tuples to store the key-value pairs
 input_output = [
     (
         FILE1,
-        AnalyzeOptions(language="en", summarize=True),
+        PrerecordedOptions(model="nova-2", smart_format=True),
+        {"results.channels.0.alternatives.0.transcript": [FILE1_SMART_FORMAT]},
+    ),
+    (
+        FILE1,
+        PrerecordedOptions(model="nova-2", smart_format=True, summarize="v2"),
         {
-            "results.summary.text": [
+            "results.channels.0.alternatives.0.transcript": [FILE1_SMART_FORMAT],
+            "results.summary.short": [
                 FILE1_SUMMARIZE1,
-            ]
+            ],
         },
     ),
 ]
 
 
 @pytest.mark.parametrize("filename, options, expected_output", input_output)
-def test_unit_read_rest_file(filename, options, expected_output):
+def test_unit_real_listen_rest_file(filename, options, expected_output):
     # options
     filenamestr = json.dumps(filename)
     input_sha256sum = hashlib.sha256(filenamestr.encode()).hexdigest()
@@ -44,8 +51,8 @@ def test_unit_read_rest_file(filename, options, expected_output):
     unique = f"{option_sha256sum}-{input_sha256sum}"
 
     # filenames
-    file_resp = f"tests/response_data/read/rest/{unique}-response.json"
-    file_error = f"tests/response_data/read/rest/{unique}-error.json"
+    file_resp = f"tests/response_data/listen/rest/{unique}-response.json"
+    file_error = f"tests/response_data/listen/rest/{unique}-error.json"
 
     # clean up
     with contextlib.suppress(FileNotFoundError):
@@ -58,7 +65,7 @@ def test_unit_read_rest_file(filename, options, expected_output):
     deepgram = DeepgramClient()
 
     # file buffer
-    with open(f"tests/daily_test/{filename}", "rb") as file:
+    with open(f"tests/unit_test/{filename}", "rb") as file:
         buffer_data = file.read()
 
     payload: FileSource = {
@@ -69,11 +76,16 @@ def test_unit_read_rest_file(filename, options, expected_output):
     transport = httpx.MockTransport(
         lambda request: httpx.Response(HTTPStatus.OK, content=response_data)
     )
-    response = deepgram.read.analyze.v("1").analyze_text(
+    response = deepgram.listen.rest.v("1").transcribe_file(
         payload, options, transport=transport
     )
 
     # Check the response
+    for key, value in response.metadata.model_info.items():
+        assert (
+            value.name == MODEL
+        ), f"Test ID: {unique} - Expected: {MODEL}, Actual: {value.name}"
+
     for key, value in expected_output.items():
         actual = response.eval(key)
         expected = value

@@ -47,7 +47,7 @@ response = ""
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("options, input, output", input_output)
-async def test_unit_async_listen_websocket(options, input, output):
+async def test_unit_real_async_listen_websocket(options, input, output):
     # Save the options
     input_sha256sum = hashlib.sha256(input.encode()).hexdigest()
     option_sha256sum = hashlib.sha256(options.to_json().encode()).hexdigest()

@@ -41,8 +41,9 @@ input_output = [
 ]
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("filename, options, expected_output", input_output)
-def test_unit_listen_rest_file(filename, options, expected_output):
+async def test_unit_real_async_listen_rest_file(filename, options, expected_output):
     # options
     filenamestr = json.dumps(filename)
     input_sha256sum = hashlib.sha256(filenamestr.encode()).hexdigest()
@@ -65,7 +66,7 @@ def test_unit_listen_rest_file(filename, options, expected_output):
     deepgram = DeepgramClient()
 
     # file buffer
-    with open(f"tests/daily_test/{filename}", "rb") as file:
+    with open(f"tests/unit_test/{filename}", "rb") as file:
         buffer_data = file.read()
 
     payload: FileSource = {
@@ -76,7 +77,7 @@ def test_unit_listen_rest_file(filename, options, expected_output):
     transport = httpx.MockTransport(
         lambda request: httpx.Response(HTTPStatus.OK, content=response_data)
     )
-    response = deepgram.listen.rest.v("1").transcribe_file(
+    response = await deepgram.listen.asyncrest.v("1").transcribe_file(
         payload, options, transport=transport
     )
 
